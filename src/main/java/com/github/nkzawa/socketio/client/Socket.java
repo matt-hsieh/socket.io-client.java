@@ -69,6 +69,7 @@ public class Socket extends Emitter {
     }};
 
     private boolean connected;
+    private boolean connecting; /* added by matt */
     private boolean disconnected = true;
     private int ids;
     private String nsp;
@@ -78,6 +79,17 @@ public class Socket extends Emitter {
     private final Queue<List<Object>> receiveBuffer = new LinkedList<List<Object>>();
     private final Queue<Packet<JSONArray>> sendBuffer = new LinkedList<Packet<JSONArray>>();
 
+    public boolean isConnected()
+    {
+    	return connected;
+    }
+    
+    /* added by matt */
+    public String getNsp()
+    {
+    	return nsp;
+    }
+    
     public Socket(Manager io, String nsp) {
         this.io = io;
         this.nsp = nsp;
@@ -105,6 +117,12 @@ public class Socket extends Emitter {
                     Socket.this.onclose(args.length > 0 ? (String) args[0] : null);
                 }
             }));
+            add(On.on(io, Manager.EVENT_RECONNECTING, new Listener() {
+                @Override
+                public void call(Object... args) {
+                    connecting = true;
+                }
+            }));
         }};
     }
 
@@ -116,7 +134,7 @@ public class Socket extends Emitter {
             @Override
             public void run() {
                 if (Socket.this.connected) return;
-
+                Socket.this.connecting = true;	// added by matt
                 Socket.this.io.open();
                 if (Manager.ReadyState.OPEN == Socket.this.io.readyState) Socket.this.onopen();
             }
@@ -256,6 +274,7 @@ public class Socket extends Emitter {
     private void onclose(String reason) {
         logger.fine(String.format("close (%s)", reason));
         this.connected = false;
+        this.connecting = false;  // added by matt
         this.disconnected = true;
         this.emit(EVENT_DISCONNECT, reason);
     }
@@ -337,11 +356,13 @@ public class Socket extends Emitter {
     private void onack(Packet<JSONArray> packet) {
         logger.fine(String.format("calling ack %s with %s", packet.id, packet.data));
         Ack fn = this.acks.remove(packet.id);
-        fn.call(toArray(packet.data));
+        if(fn != null)
+        	fn.call(toArray(packet.data));
     }
 
     private void onconnect() {
         this.connected = true;
+        this.connecting = false; // added by matt
         this.disconnected = false;
         this.emit(EVENT_CONNECT);
         this.emitBuffered();
@@ -385,7 +406,7 @@ public class Socket extends Emitter {
         EventThread.exec(new Runnable() {
             @Override
             public void run() {
-                if (!Socket.this.connected) return;
+                if (!Socket.this.connected && !Socket.this.connecting /* added by matt */) return;
 
                 logger.fine(String.format("performing disconnect (%s)", Socket.this.nsp));
                 Socket.this.packet(new Packet(Parser.DISCONNECT));

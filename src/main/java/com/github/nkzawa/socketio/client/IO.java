@@ -60,17 +60,27 @@ public class IO {
         } catch (MalformedURLException e) {
             throw new URISyntaxException(uri.toString(), e.getMessage());
         }
-        URI source = parsed.toURI();
+        final URI source = parsed.toURI();
         Manager io;
 
         if (opts.forceNew || !opts.multiplex) {
             logger.fine(String.format("ignoring socket cache for %s", source));
             io = new Manager(source, opts);
         } else {
-            String id = Url.extractId(parsed);
+            final String id = Url.extractId(parsed);
             if (!managers.containsKey(id)) {
                 logger.fine(String.format("new io instance for %s", source));
-                managers.putIfAbsent(id, new Manager(source, opts));
+                /* modified by matt */
+                Manager manager = new Manager(source, opts);
+                managers.putIfAbsent(id, manager);
+                manager.on(Manager.EVENT_CLOSE, new com.github.nkzawa.emitter.Emitter.Listener() {
+					@Override
+					public void call(Object... args)
+					{
+						 Log.d(LOG_TAG, String.format("remove io instance for %s", source));
+						managers.remove(id);
+					}
+				});
             }
             io = managers.get(id);
         }

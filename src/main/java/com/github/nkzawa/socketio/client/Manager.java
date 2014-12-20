@@ -73,6 +73,7 @@ public class Manager extends Emitter {
     private boolean _reconnection;
     private boolean skipReconnect;
     private boolean reconnecting;
+    private boolean reconnectFailed; /* added by matt */
     private boolean encoding;
     private boolean openReconnect;
     private int _reconnectionAttempts;
@@ -191,7 +192,7 @@ public class Manager extends Emitter {
     }
 
     private void maybeReconnectOnOpen() {
-        if (!this.openReconnect && !this.reconnecting && this._reconnection) {
+        if (!this.openReconnect && !this.reconnecting && this._reconnection && !skipReconnect /* added by matt*/ ) {
             this.openReconnect = true;
             this.reconnect();
         }
@@ -220,6 +221,14 @@ public class Manager extends Emitter {
                 final Manager self = Manager.this;
 
                 Manager.this.readyState = ReadyState.OPENING;
+
+                // propagate transport event.
+                socket.on(Engine.EVENT_TRANSPORT, new Listener() {
+                    @Override
+                    public void call(Object... args) {
+                        self.emit(Manager.EVENT_TRANSPORT, args);
+                    }
+                });
 
                 final On.Handle openSub = On.on(socket, Engine.EVENT_OPEN, new Listener() {
                     @Override
@@ -286,7 +295,10 @@ public class Manager extends Emitter {
 
     private void onopen() {
         logger.fine("open");
-
+        this.skipReconnect = false; /* added by matt */
+    	this.reconnecting = false; /* added by matt */
+    	this.reconnectFailed = false; /* added by matt */
+    	
         this.cleanup();
 
         this.readyState = ReadyState.OPEN;
@@ -341,6 +353,16 @@ public class Manager extends Emitter {
         this.emitAll(EVENT_ERROR, err);
     }
 
+
+    // added by matt
+    Listener _socketConnectListener = new Listener() {
+        @Override
+        public void call(Object... objects) {
+        	Manager.this.connected++;
+        	Log.d(LOG_TAG + getLogId(), "connected: " + Manager.this.connected);
+        }
+    };
+    
     /**
      * Initializes {@link Socket} instances for each namespaces.
      *
@@ -356,20 +378,17 @@ public class Manager extends Emitter {
                 socket = _socket;
             } else {
                 final Manager self = this;
-                socket.on(Socket.EVENT_CONNECT, new Listener() {
-                    @Override
-                    public void call(Object... objects) {
-                        self.connected++;
-                    }
-                });
+                socket.on(Socket.EVENT_CONNECT, _socketConnectListener /* modified by matt */);
             }
         }
         return socket;
     }
 
     /*package*/ void destroy(Socket socket) {
+    	socket.off(Socket.EVENT_CONNECT, _socketConnectListener);  /* added by matt */
+    	this.nsps.remove(socket.getNsp()); /* added by matt */
         --this.connected;
-        if (this.connected == 0) {
+        if (this.connected <= /* modified by matt*/ 0) {
             this.close();
         }
     }
@@ -418,6 +437,7 @@ public class Manager extends Emitter {
 
     private void onclose(String reason) {
         logger.fine("close");
+        this.connected--; // added by matt
         this.cleanup();
         this.readyState = ReadyState.CLOSED;
         this.emit(EVENT_CLOSE, reason);
@@ -427,7 +447,7 @@ public class Manager extends Emitter {
     }
 
     private void reconnect() {
-        if (this.reconnecting) return;
+        if (this.reconnecting || reconnectFailed /* added by matt*/ || skipReconnect /* added by matt*/) return;
 
         final Manager self = this;
         this.attempts++;
@@ -435,6 +455,8 @@ public class Manager extends Emitter {
         if (attempts > this._reconnectionAttempts) {
             logger.fine("reconnect failed");
             this.emitAll(EVENT_RECONNECT_FAILED);
+            this.attempts = 0; /* added by matt*/
+            this.reconnectFailed = true; /* added by matt*/
             this.reconnecting = false;
         } else {
             long delay = this.attempts * this.reconnectionDelay();
