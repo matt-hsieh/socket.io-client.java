@@ -384,7 +384,6 @@ public class Manager extends Emitter {
     }
 
     /*package*/ void destroy(Socket socket) {
-    	socket.off(Socket.EVENT_CONNECT, _socketConnectListener);  /* added by matt */
     	this.nsps.remove(socket.getNsp()); /* added by matt */
         this.connected.remove(socket);
         if (this.connected.size() > 0) return;
@@ -439,7 +438,6 @@ public class Manager extends Emitter {
 
     private void onclose(String reason) {
         logger.fine("close");
-        this.connected--; // added by matt
         this.cleanup();
         this.readyState = ReadyState.CLOSED;
         this.emit(EVENT_CLOSE, reason);

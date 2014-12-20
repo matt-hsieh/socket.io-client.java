@@ -77,7 +77,7 @@ public class IO {
 					@Override
 					public void call(Object... args)
 					{
-						 Log.d(LOG_TAG, String.format("remove io instance for %s", source));
+                        logger.fine(String.format("remove io instance for %s", source));
 						managers.remove(id);
 					}
 				});
