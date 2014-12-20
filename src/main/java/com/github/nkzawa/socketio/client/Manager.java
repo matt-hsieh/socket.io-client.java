@@ -7,10 +7,7 @@ import com.github.nkzawa.thread.EventThread;
 
 import javax.net.ssl.SSLContext;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -66,6 +63,11 @@ public class Manager extends Emitter {
 
     public static final String EVENT_RECONNECTING = "reconnecting";
 
+    /**
+     * Called when a new transport is created. (experimental)
+     */
+    public static final String EVENT_TRANSPORT = Engine.EVENT_TRANSPORT;
+
     /*package*/ static SSLContext defaultSSLContext;
 
     /*package*/ ReadyState readyState = null;
@@ -80,7 +82,7 @@ public class Manager extends Emitter {
     private long _reconnectionDelay;
     private long _reconnectionDelayMax;
     private long _timeout;
-    private int connected;
+    private Set<Socket> connected;
     private int attempts;
     private URI uri;
     private List<Packet> packetBuffer;
@@ -95,8 +97,8 @@ public class Manager extends Emitter {
      */
     private ConcurrentHashMap<String, Socket> nsps;
 
-    private ScheduledExecutorService timeoutScheduler = Executors.newSingleThreadScheduledExecutor();
-    private ScheduledExecutorService reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService timeoutScheduler;
+    private ScheduledExecutorService reconnectScheduler;
 
 
     public Manager() {
@@ -131,7 +133,7 @@ public class Manager extends Emitter {
         this.timeout(opts.timeout < 0 ? 20000 : opts.timeout);
         this.readyState = ReadyState.CLOSED;
         this.uri = uri;
-        this.connected = 0;
+        this.connected = new HashSet<Socket>();
         this.attempts = 0;
         this.encoding = false;
         this.packetBuffer = new ArrayList<Packet>();
@@ -192,7 +194,8 @@ public class Manager extends Emitter {
     }
 
     private void maybeReconnectOnOpen() {
-        if (!this.openReconnect && !this.reconnecting && this._reconnection && !skipReconnect /* added by matt*/ ) {
+        // Only try to reconnect if it's the first time we're connecting
+        if (!this.openReconnect && !this.reconnecting && this._reconnection) {
             this.openReconnect = true;
             this.reconnect();
         }
@@ -219,8 +222,8 @@ public class Manager extends Emitter {
                 Manager.this.engine = new Engine(Manager.this.uri, Manager.this.opts);
                 final com.github.nkzawa.engineio.client.Socket socket = Manager.this.engine;
                 final Manager self = Manager.this;
-
                 Manager.this.readyState = ReadyState.OPENING;
+                Manager.this.skipReconnect = false;
 
                 // propagate transport event.
                 socket.on(Engine.EVENT_TRANSPORT, new Listener() {
@@ -260,7 +263,7 @@ public class Manager extends Emitter {
                     final long timeout = Manager.this._timeout;
                     logger.fine(String.format("connection attempt will timeout after %d", timeout));
 
-                    final Future timer = timeoutScheduler.schedule(new Runnable() {
+                    final Future timer = getTimeoutScheduler().schedule(new Runnable() {
                         @Override
                         public void run() {
                             EventThread.exec(new Runnable() {
@@ -353,16 +356,6 @@ public class Manager extends Emitter {
         this.emitAll(EVENT_ERROR, err);
     }
 
-
-    // added by matt
-    Listener _socketConnectListener = new Listener() {
-        @Override
-        public void call(Object... objects) {
-        	Manager.this.connected++;
-        	Log.d(LOG_TAG + getLogId(), "connected: " + Manager.this.connected);
-        }
-    };
-    
     /**
      * Initializes {@link Socket} instances for each namespaces.
      *
@@ -378,7 +371,13 @@ public class Manager extends Emitter {
                 socket = _socket;
             } else {
                 final Manager self = this;
-                socket.on(Socket.EVENT_CONNECT, _socketConnectListener /* modified by matt */);
+                final Socket s = socket;
+                socket.on(Socket.EVENT_CONNECT, new Listener() {
+                    @Override
+                    public void call(Object... objects) {
+                        self.connected.add(s);
+                    }
+                });
             }
         }
         return socket;
@@ -387,10 +386,10 @@ public class Manager extends Emitter {
     /*package*/ void destroy(Socket socket) {
     	socket.off(Socket.EVENT_CONNECT, _socketConnectListener);  /* added by matt */
     	this.nsps.remove(socket.getNsp()); /* added by matt */
-        --this.connected;
-        if (this.connected <= /* modified by matt*/ 0) {
-            this.close();
-        }
+        this.connected.remove(socket);
+        if (this.connected.size() > 0) return;
+
+        this.close();
     }
 
     /*package*/ void packet(Packet packet) {
@@ -430,9 +429,12 @@ public class Manager extends Emitter {
         while ((sub = this.subs.poll()) != null) sub.destroy();
     }
 
-    private void close() {
+    /*package*/ void close() {
         this.skipReconnect = true;
-        this.engine.close();
+        this.readyState = ReadyState.CLOSED;
+        if (this.engine != null) {
+            this.engine.close();
+        }
     }
 
     private void onclose(String reason) {
@@ -441,13 +443,21 @@ public class Manager extends Emitter {
         this.cleanup();
         this.readyState = ReadyState.CLOSED;
         this.emit(EVENT_CLOSE, reason);
+
+        if (this.timeoutScheduler != null) {
+            this.timeoutScheduler.shutdown();
+        }
+        if (this.reconnectScheduler != null) {
+            this.reconnectScheduler.shutdown();
+        }
+
         if (this._reconnection && !this.skipReconnect) {
             this.reconnect();
         }
     }
 
     private void reconnect() {
-        if (this.reconnecting || reconnectFailed /* added by matt*/ || skipReconnect /* added by matt*/) return;
+        if (this.reconnecting || reconnectFailed /* added by matt*/ || this.skipReconnect) return;
 
         final Manager self = this;
         this.attempts++;
@@ -464,15 +474,21 @@ public class Manager extends Emitter {
             logger.fine(String.format("will wait %dms before reconnect attempt", delay));
 
             this.reconnecting = true;
-            final Future timer = this.reconnectScheduler.schedule(new Runnable() {
+            final Future timer = this.getReconnectScheduler().schedule(new Runnable() {
                 @Override
                 public void run() {
                     EventThread.exec(new Runnable() {
                         @Override
                         public void run() {
+                            if (self.skipReconnect) return;
+
                             logger.fine("attempting reconnect");
                             self.emitAll(EVENT_RECONNECT_ATTEMPT, self.attempts);
                             self.emitAll(EVENT_RECONNECTING, self.attempts);
+
+                            // check again for the case socket closed in above events
+                            if (self.skipReconnect) return;
+
                             self.open(new OpenCallback() {
                                 @Override
                                 public void call(Exception err) {
@@ -506,6 +522,20 @@ public class Manager extends Emitter {
         this.attempts = 0;
         this.reconnecting = false;
         this.emitAll(EVENT_RECONNECT, attempts);
+    }
+
+    private ScheduledExecutorService getTimeoutScheduler() {
+        if (this.timeoutScheduler == null || this.timeoutScheduler.isShutdown()) {
+           this.timeoutScheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        return timeoutScheduler;
+    }
+
+    private ScheduledExecutorService getReconnectScheduler() {
+        if (this.reconnectScheduler == null || this.reconnectScheduler.isShutdown()) {
+            this.reconnectScheduler = Executors.newSingleThreadScheduledExecutor();
+        }
+        return this.reconnectScheduler;
     }
 
 

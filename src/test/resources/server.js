@@ -15,6 +15,22 @@ var port = process.env.PORT || 3000;
 var nsp = process.argv[2] || '/';
 var slice = Array.prototype.slice;
 
+io.of('/foo').on('connection', function() {
+  // register namespace
+});
+
+io.of('/timeout_socket').on('connection', function() {
+  // register namespace
+});
+
+io.of('/valid').on('connection', function() {
+  // register namespace
+});
+
+io.of('/asd').on('connection', function() {
+  // register namespace
+});
+
 io.of(nsp).on('connection', function(socket) {
   socket.send('hello client');
 
@@ -50,6 +66,15 @@ io.of(nsp).on('connection', function(socket) {
     socket.broadcast.emit.apply(socket, ['broadcastBack'].concat(args));
   });
 
+  socket.on('room', function() {
+    var args = slice.call(arguments);
+    io.to(socket.id).emit.apply(socket, ['roomBack'].concat(args));
+  });
+
+  socket.on('requestDisconnect', function() {
+    socket.disconnect();
+  });
+
   socket.on('disconnect', function() {
     console.log('disconnect');
   });
@@ -58,6 +83,32 @@ io.of(nsp).on('connection', function(socket) {
     console.log('error: ', arguments);
   });
 });
+
+
+function before(context, name, fn) {
+  var method = context[name];
+  context[name] = function() {
+    fn.apply(this, arguments);
+    return method.apply(this, arguments);
+  };
+}
+
+before(io.engine, 'handleRequest', function(req, res) {
+  // echo a header value
+  var value = req.headers['x-socketio'];
+  if (!value) return;
+  res.setHeader('X-SocketIO', value);
+});
+
+before(io.engine, 'handleUpgrade', function(req, socket, head) {
+  // echo a header value for websocket handshake
+  var value = req.headers['x-socketio'];
+  if (!value) return;
+  this.ws.once('headers', function(headers) {
+    headers.push('X-SocketIO: ' + value);
+  });
+});
+
 
 server.listen(port, function() {
   console.log('Socket.IO server listening on port', port);

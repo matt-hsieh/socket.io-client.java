@@ -1,7 +1,7 @@
 package com.github.nkzawa.socketio.client;
 
 import com.github.nkzawa.emitter.Emitter;
-import com.github.nkzawa.hasbinarydata.HasBinaryData;
+import com.github.nkzawa.hasbinary.HasBinary;
 import com.github.nkzawa.socketio.parser.Packet;
 import com.github.nkzawa.socketio.parser.Parser;
 import com.github.nkzawa.thread.EventThread;
@@ -68,9 +68,8 @@ public class Socket extends Emitter {
         put(EVENT_RECONNECTING, 1);
     }};
 
-    private boolean connected;
+    private volatile boolean connected;
     private boolean connecting; /* added by matt */
-    private boolean disconnected = true;
     private int ids;
     private String nsp;
     private Manager io;
@@ -93,10 +92,11 @@ public class Socket extends Emitter {
     public Socket(Manager io, String nsp) {
         this.io = io;
         this.nsp = nsp;
-        this.subEvents();
     }
 
     private void subEvents() {
+        if (this.subs != null) return;
+
         final Manager io = Socket.this.io;
         Socket.this.subs = new LinkedList<On.Handle>() {{
             add(On.on(io, Manager.EVENT_OPEN, new Listener() {
@@ -135,7 +135,8 @@ public class Socket extends Emitter {
             public void run() {
                 if (Socket.this.connected) return;
                 Socket.this.connecting = true;	// added by matt
-                Socket.this.io.open();
+                Socket.this.subEvents();
+                Socket.this.io.open(); // ensure open
                 if (Manager.ReadyState.OPEN == Socket.this.io.readyState) Socket.this.onopen();
             }
         });
@@ -190,8 +191,7 @@ public class Socket extends Emitter {
                 for (Object arg : _args) {
                     jsonArgs.put(arg);
                 }
-                int parserType = Parser.EVENT;
-                if (HasBinaryData.hasBinary(jsonArgs)) { parserType = Parser.BINARY_EVENT; }
+                int parserType = HasBinary.hasBinary(jsonArgs) ? Parser.BINARY_EVENT : Parser.EVENT;
                 Packet<JSONArray> packet = new Packet<JSONArray>(parserType, jsonArgs);
 
                 if (_args.get(_args.size() - 1) instanceof Ack) {
@@ -246,7 +246,13 @@ public class Socket extends Emitter {
                         addAll(Arrays.asList(args));
                     }
                 }};
-                Packet<JSONArray> packet = new Packet<JSONArray>(Parser.EVENT, new JSONArray(_args));
+                
+                JSONArray jsonArgs = new JSONArray();
+                for (Object _arg : _args) {
+                    jsonArgs.put(_arg);
+                }
+                int parserType = HasBinary.hasBinary(jsonArgs) ? Parser.BINARY_EVENT : Parser.EVENT;
+                Packet<JSONArray> packet = new Packet<JSONArray>(parserType, jsonArgs);
 
                 logger.fine(String.format("emitting packet with ack id %d", ids));
                 Socket.this.acks.put(ids, ack);
@@ -275,7 +281,6 @@ public class Socket extends Emitter {
         logger.fine(String.format("close (%s)", reason));
         this.connected = false;
         this.connecting = false;  // added by matt
-        this.disconnected = true;
         this.emit(EVENT_DISCONNECT, reason);
     }
 
@@ -343,7 +348,7 @@ public class Socket extends Emitter {
                         sent[0] = true;
                         logger.fine(String.format("sending ack %s", args.length != 0 ? args : null));
 
-                        int type = HasBinaryData.hasBinary(args) ? Parser.BINARY_ACK : Parser.ACK;
+                        int type = HasBinary.hasBinary(args) ? Parser.BINARY_ACK : Parser.ACK;
                         Packet<JSONArray> packet = new Packet<JSONArray>(type, new JSONArray(Arrays.asList(args)));
                         packet.id = id;
                         self.packet(packet);
@@ -363,7 +368,6 @@ public class Socket extends Emitter {
     private void onconnect() {
         this.connected = true;
         this.connecting = false; // added by matt
-        this.disconnected = false;
         this.emit(EVENT_CONNECT);
         this.emitBuffered();
     }
@@ -390,8 +394,12 @@ public class Socket extends Emitter {
     }
 
     private void destroy() {
-        for (On.Handle sub : this.subs) {
-            sub.destroy();
+        if (this.subs != null) {
+            // clean subscriptions to avoid reconnection
+            for (On.Handle sub : this.subs) {
+                sub.destroy();
+            }
+            this.subs = null;
         }
 
         this.io.destroy(this);
@@ -406,14 +414,16 @@ public class Socket extends Emitter {
         EventThread.exec(new Runnable() {
             @Override
             public void run() {
-                if (!Socket.this.connected && !Socket.this.connecting /* added by matt */) return;
-
-                logger.fine(String.format("performing disconnect (%s)", Socket.this.nsp));
-                Socket.this.packet(new Packet(Parser.DISCONNECT));
+                if (Socket.this.connected || Socket.this.connecting) {
+                    logger.fine(String.format("performing disconnect (%s)", Socket.this.nsp));
+                    Socket.this.packet(new Packet(Parser.DISCONNECT));
+                }
 
                 Socket.this.destroy();
 
-                Socket.this.onclose("io client disconnect");
+                if (Socket.this.connected) {
+                    Socket.this.onclose("io client disconnect");
+                }
             }
         });
         return this;
@@ -430,6 +440,10 @@ public class Socket extends Emitter {
 
     public Manager io() {
         return io;
+    }
+
+    public boolean connected() {
+        return connected;
     }
 
     private static Object[] toArray(JSONArray array) {
