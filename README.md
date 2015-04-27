@@ -3,26 +3,32 @@
 
 This is the Socket.IO v1.x Client Library for Java, which is simply ported from the [JavaScript client](https://github.com/Automattic/socket.io-client).
 
-See also: [Engine.IO-client.java](https://github.com/nkzawa/engine.io-client.java)
+See also:
+
+- [Android chat demo](https://github.com/nkzawa/socket.io-android-chat)
+- [engine.io-client.java](https://github.com/nkzawa/engine.io-client.java)
 
 ## Installation
-The latest artifact is available on Maven Central. Add the following dependency to your `pom.xml`.
+The latest artifact is available on Maven Central. To install manually, please refer dependencies to [pom.xml](https://github.com/nkzawa/socket.io-client.java/blob/master/pom.xml).
+
+### Maven
+Add the following dependency to your `pom.xml`.
 
 ```xml
 <dependencies>
   <dependency>
     <groupId>com.github.nkzawa</groupId>
     <artifactId>socket.io-client</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.2</version>
   </dependency>
 </dependencies>
 ```
 
-Or to install it manually, please refer dependencies to [pom.xml](https://github.com/nkzawa/socket.io-client.java/blob/master/pom.xml).
+### Gradle
+Add it as a gradle dependency for Android Studio, in `build.gradle`:
 
-Add it as a gradle dependency for Android Studio, in build.gradle:
-```javascript
-compile 'com.github.nkzawa:socket.io-client:0.3.0'
+```groovy
+compile 'com.github.nkzawa:socket.io-client:0.4.2'
 ```
 
 ## Usage
@@ -86,6 +92,19 @@ You can get a callback with `Ack` when the server received a message:
 socket.emit("foo", "woot", new Ack() {
   @Override
   public void call(Object... args) {}
+});
+```
+
+And vice versa:
+
+```java
+// ack from client to server
+socket.on("foo", new Emitter.Listener() {
+  @Override
+  public void call(Object... args) {
+    Ack ack = (Ack) args[args.length - 1];
+    ack.call();
+  }
 });
 ```
 
