@@ -1,3 +1,25 @@
+0.5.2 / 2015-06-28
+==================
+
+* make Socket.events protected [icapurro]
+* fix readyState check on Manager#open
+* change IO.socket(URI) not to throw URISyntaxException
+
+0.5.1 / 2015-06-06
+==================
+
+* bump `engine.io-client`.
+* fix timeout option
+* fix NullPointerException on ack
+
+0.5.0 / 2015-05-02
+==================
+
+* bump `engine.io-client`.
+* enhance parser decode [niqo01]
+* add a wrong event name check
+* add setDefaultHostnameVerifier method
+
 0.4.2 / 2015-03-07
 ==================
 

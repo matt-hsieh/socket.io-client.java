@@ -6,10 +6,11 @@ import com.github.nkzawa.socketio.parser.Packet;
 import com.github.nkzawa.socketio.parser.Parser;
 import com.github.nkzawa.thread.EventThread;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -70,6 +71,7 @@ public class Manager extends Emitter {
     public static final String EVENT_TRANSPORT = Engine.EVENT_TRANSPORT;
 
     /*package*/ static SSLContext defaultSSLContext;
+    /*package*/ static HostnameVerifier defaultHostnameVerifier;
 
     /*package*/ ReadyState readyState = null;
 
@@ -121,6 +123,9 @@ public class Manager extends Emitter {
         if (opts.sslContext == null) {
             opts.sslContext = defaultSSLContext;
         }
+        if (opts.hostnameVerifier == null) {
+            opts.hostnameVerifier = defaultHostnameVerifier;
+        }
         this.opts = opts;
         this.nsps = new ConcurrentHashMap<String, Socket>();
         this.subs = new LinkedList<On.Handle>();
@@ -133,7 +138,7 @@ public class Manager extends Emitter {
                 .setMin(this.reconnectionDelay())
                 .setMax(this.reconnectionDelayMax())
                 .setJitter(this.randomizationFactor());
-        this.timeout(opts.timeout < 0 ? 20000 : opts.timeout);
+        this.timeout(opts.timeout);
         this.readyState = ReadyState.CLOSED;
         this.uri = uri;
         this.connected = new HashSet<Socket>();
@@ -244,7 +249,7 @@ public class Manager extends Emitter {
             @Override
             public void run() {
                 logger.fine(String.format("readyState %s", Manager.this.readyState));
-                if (Manager.this.readyState == ReadyState.OPEN) return;
+                if (Manager.this.readyState == ReadyState.OPEN || Manager.this.readyState == ReadyState.OPENING) return;
 
                 logger.fine(String.format("opening %s", Manager.this.uri));
                 Manager.this.engine = new Engine(Manager.this.uri, Manager.this.opts);
@@ -573,6 +578,10 @@ public class Manager extends Emitter {
         public long reconnectionDelay;
         public long reconnectionDelayMax;
         public double randomizationFactor;
-        public long timeout = -1;
+
+        /**
+         * Connection timeout (ms). Set -1 to disable.
+         */
+        public long timeout = 20000;
     }
 }

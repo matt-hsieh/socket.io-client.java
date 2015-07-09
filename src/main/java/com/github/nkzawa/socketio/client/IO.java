@@ -3,8 +3,8 @@ package com.github.nkzawa.socketio.client;
 
 import com.github.nkzawa.socketio.parser.Parser;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -27,6 +27,10 @@ public class IO {
         Manager.defaultSSLContext = sslContext;
     }
 
+    public static void setDefaultHostnameVerifier(HostnameVerifier hostnameVerifier) {
+        Manager.defaultHostnameVerifier = hostnameVerifier;
+    }
+
     private IO() {}
 
     public static Socket socket(String uri) throws URISyntaxException {
@@ -37,7 +41,7 @@ public class IO {
         return socket(new URI(uri), opts);
     }
 
-    public static Socket socket(URI uri) throws URISyntaxException {
+    public static Socket socket(URI uri) {
         return socket(uri, null);
     }
 
@@ -47,20 +51,20 @@ public class IO {
      * @param uri uri to connect.
      * @param opts options for socket.
      * @return {@link Socket} instance.
-     * @throws URISyntaxException
      */
-    public static Socket socket(URI uri, Options opts) throws URISyntaxException {
+    public static Socket socket(URI uri, Options opts) {
         if (opts == null) {
             opts = new Options();
         }
 
-        URL parsed;
+        URL parsed = Url.parse(uri);
+        URI source;
         try {
-            parsed = Url.parse(uri);
-        } catch (MalformedURLException e) {
-            throw new URISyntaxException(uri.toString(), e.getMessage());
+            source = parsed.toURI();
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
         }
-        final URI source = parsed.toURI();
+        final URI source_ = source;
         Manager io;
 
         if (opts.forceNew || !opts.multiplex) {
@@ -77,7 +81,7 @@ public class IO {
 					@Override
 					public void call(Object... args)
 					{
-                        logger.fine(String.format("remove io instance for %s", source));
+                        logger.fine(String.format("remove io instance for %s", source_));
 						managers.remove(id);
 					}
 				});

@@ -9,7 +9,7 @@ See also:
 - [engine.io-client.java](https://github.com/nkzawa/engine.io-client.java)
 
 ## Installation
-The latest artifact is available on Maven Central. To install manually, please refer dependencies to [pom.xml](https://github.com/nkzawa/socket.io-client.java/blob/master/pom.xml).
+The latest artifact is available on Maven Central. You'll also need [dependencies](http://nkzawa.github.io/socket.io-client.java/dependencies.html) to install.
 
 ### Maven
 Add the following dependency to your `pom.xml`.
@@ -19,7 +19,7 @@ Add the following dependency to your `pom.xml`.
   <dependency>
     <groupId>com.github.nkzawa</groupId>
     <artifactId>socket.io-client</artifactId>
-    <version>0.4.2</version>
+    <version>0.5.2</version>
   </dependency>
 </dependencies>
 ```
@@ -28,7 +28,7 @@ Add the following dependency to your `pom.xml`.
 Add it as a gradle dependency for Android Studio, in `build.gradle`:
 
 ```groovy
-compile 'com.github.nkzawa:socket.io-client:0.4.2'
+compile 'com.github.nkzawa:socket.io-client:0.5.2'
 ```
 
 ## Usage
@@ -84,6 +84,15 @@ opts.forceNew = true;
 opts.reconnection = false;
 
 socket = IO.socket("http://localhost", opts);
+```
+
+You can supply query parameters with the `query` option. NB: if you don't want to reuse a cached socket instance when the query parameter changes, you should use the `forceNew` option, the use case might be if your app allows for a user to logout, and a new user to login again:
+
+```java
+IO.Options opts = new IO.Options();
+opts.forceNew = true;
+opts.query = "auth_token=" + authToken;
+Socket socket = IO.socket("http://localhost", opts);
 ```
 
 You can get a callback with `Ack` when the server received a message:

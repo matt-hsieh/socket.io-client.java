@@ -55,7 +55,7 @@ public class Socket extends Emitter {
 
     public static final String EVENT_RECONNECTING = Manager.EVENT_RECONNECTING;
 
-    private static Map<String, Integer> events = new HashMap<String, Integer>() {{
+    protected static Map<String, Integer> events = new HashMap<String, Integer>() {{
         put(EVENT_CONNECT, 1);
         put(EVENT_CONNECT_ERROR, 1);
         put(EVENT_CONNECT_TIMEOUT, 1);
@@ -363,10 +363,13 @@ public class Socket extends Emitter {
     }
 
     private void onack(Packet<JSONArray> packet) {
-        logger.fine(String.format("calling ack %s with %s", packet.id, packet.data));
         Ack fn = this.acks.remove(packet.id);
-        if(fn != null)
-        	fn.call(toArray(packet.data));
+        if (fn != null) {
+            logger.fine(String.format("calling ack %s with %s", packet.id, packet.data));
+            fn.call(toArray(packet.data));
+        } else {
+            logger.fine(String.format("bad ack %s", packet.id));
+        }
     }
 
     private void onconnect() {
