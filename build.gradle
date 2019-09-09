@@ -14,8 +14,11 @@ repositories {
 }
 
 dependencies {
-    compile 'org.json:json:20090211'
-    compile 'com.github.nkzawa:engine.io-client:0.5.1'
+    implementation 'org.json:json:20090211'
+    implementation 'com.squareup.okhttp3:okhttp:3.8.1'
+    implementation(project(':libs:engine.io-client.java')) {
+        exclude module: 'json'
+    }
 }
 
 targetCompatibility = '1.7'

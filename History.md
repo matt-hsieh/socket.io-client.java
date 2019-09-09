@@ -1,3 +1,76 @@
+
+1.0.0 / 2017-07-14
+==================
+
+* compatible with socket.io 2.0.x
+* update engine.io-client
+* custom encoder/decoder support
+* fix socket id
+
+0.9.0 / 2017-07-11
+==================
+
+* compatible with socket.io 1.7.4
+* bump engine.io-client
+* send query on connect
+
+0.8.3 / 2016-12-12
+==================
+
+* bump `engine.io-client`
+
+0.8.2 / 2016-10-22
+==================
+
+* bump `engine.io-client`
+
+0.8.1 / 2016-09-27
+==================
+
+* bump `engine.io-client`
+
+0.8.0 / 2016-09-23
+==================
+
+* bump `engine.io-client`
+* README: fix typos [kylestev, lu-zero]
+* test: use TLSv1
+
+0.7.0 / 2016-02-01
+==================
+
+* compatible with socket.io 1.4.5
+* bump `engine.io-client`
+* fix event type when emitting ack with binary data [cirocosta]
+* don't reuse same namespace connections
+* fix handling of disconnection while in `opening` state
+* add ping and pong events
+* improve cleanup on `Manager`
+
+0.6.3 / 2015-12-23
+==================
+
+* bump `engine.io-client`.
+* fix back-off calculation
+* code quality improvements [civanyp]
+
+0.6.2 / 2015-10-10
+==================
+
+* compatible with socket.io 1.3.7
+* bump `engine.io-client`
+* fix wrong reconnection state
+
+0.6.1 / 2015-08-31
+==================
+
+* change package name to "io.socket"
+
+0.6.0 / 2015-08-09
+==================
+
+* bump `engine.io-client`.
+
 0.5.2 / 2015-06-28
 ==================
 

@@ -10,7 +10,10 @@ if (process.env.SSL) {
   server = require('http').createServer();
 }
 
-var io = require('socket.io')(server);
+var io = require('socket.io')(server, {
+  pingInterval: 2000,
+  wsEngine: 'ws'
+});
 var port = process.env.PORT || 3000;
 var nsp = process.argv[2] || '/';
 var slice = Array.prototype.slice;
@@ -29,6 +32,10 @@ io.of('/valid').on('connection', function() {
 
 io.of('/asd').on('connection', function() {
   // register namespace
+});
+
+io.of('/abc').on('connection', function(socket) {
+  socket.emit('handshake', socket.handshake);
 });
 
 io.of(nsp).on('connection', function(socket) {
@@ -57,6 +64,17 @@ io.of(nsp).on('connection', function(socket) {
     });
   });
 
+  socket.on('callAckBinary', function() {
+    socket.emit('ack', function(buf) {
+      socket.emit('ackBack', buf);
+    });
+  });
+
+  socket.on('getAckBinary', function(data, callback) {
+    var buf = new Buffer('huehue', 'utf8');
+    callback(buf);
+  });
+
   socket.on('getAckDate', function(data, callback) {
     callback(new Date());
   });
@@ -81,6 +99,10 @@ io.of(nsp).on('connection', function(socket) {
 
   socket.on('error', function() {
     console.log('error: ', arguments);
+  });
+
+  socket.on('getHandshake', function(cb) {
+    cb(socket.handshake);
   });
 });
 
