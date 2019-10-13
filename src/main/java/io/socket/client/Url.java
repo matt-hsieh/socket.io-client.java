@@ -4,6 +4,7 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class Url {
@@ -43,7 +44,7 @@ public class Url {
         try {
             return new URL(protocol + "://"
                     + (userInfo != null ? userInfo + "@" : "")
-                    + uri.getHost()
+                    + extractHost(uri)
                     + (port != -1 ? ":" + port : "")
                     + path
                     + (query != null ? "?" + query : "")
@@ -68,6 +69,84 @@ public class Url {
             }
         }
         return protocol + "://" + url.getHost() + ":" + port;
+    }
+
+    private static String extractHost(URI uri)
+    {
+        // Extract the host part from the URI.
+        String host = uri.getHost();
+
+        if (host != null)
+        {
+            return host;
+        }
+
+        // According to https://github.com/TakahikoKawasaki/nv-websocket-client/issues/74, URI.getHost() method returns null in
+        // the following environment when the host part of the URI is
+        // a host name.
+        //
+        //   - Samsung Galaxy S3 + Android API 18
+        //   - Samsung Galaxy S4 + Android API 21
+        //
+        // The following is a workaround for the issue.
+
+        // Extract the host part from the authority part of the URI.
+        host = extractHostFromAuthorityPart(uri.getRawAuthority());
+
+        if (host != null)
+        {
+            return host;
+        }
+
+        // Extract the host part from the entire URI.
+        return extractHostFromEntireUri(uri.toString());
+    }
+
+
+    private static String extractHostFromAuthorityPart(String authority)
+    {
+        // If the authority part is not available.
+        if (authority == null)
+        {
+            // Hmm... This should not happen.
+            return null;
+        }
+
+        // Parse the authority part. The expected format is "[id:password@]host[:port]".
+        Matcher matcher = Pattern.compile("^(.*@)?([^:]+)(:\\d+)?$").matcher(authority);
+
+        // If the authority part does not match the expected format.
+        if (!matcher.matches())
+        {
+            // Hmm... This should not happen.
+            return null;
+        }
+
+        // Return the host part.
+        return matcher.group(2);
+    }
+
+
+    private static String extractHostFromEntireUri(String uri)
+    {
+        if (uri == null)
+        {
+            // Hmm... This should not happen.
+            return null;
+        }
+
+        // Parse the URI. The expected format is "scheme://[id:password@]host[:port][...]".
+        Matcher matcher = Pattern.compile("^\\w+://([^@/]*@)?([^:/]+)(:\\d+)?(/.*)?$").matcher(uri);
+
+        // If the URI does not match the expected format.
+        if (!matcher.matches())
+        {
+            // Hmm... This should not happen.
+            return null;
+        }
+
+        // Return the host part.
+        return matcher.group(2);
     }
 
 }
